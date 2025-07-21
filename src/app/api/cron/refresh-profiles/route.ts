@@ -92,6 +92,92 @@ export async function POST(req: NextRequest) {
             last_refresh: now.toISOString()
           })
           .eq("id", user.id);
+          
+        // Update streak calculation
+        try {
+          // Get user's current streak data
+          const { data: userData } = await supabaseAdmin
+            .from("users")
+            .select("total_solved, last_solved_date, current_streak, max_streak")
+            .eq("id", user.id)
+            .single();
+            
+          if (userData) {
+            const today = new Date().toISOString().split('T')[0];
+            const previousTotal = userData.total_solved || 0;
+            const lastSolvedDate = userData.last_solved_date;
+            const currentStreak = userData.current_streak || 0;
+            const maxStreak = userData.max_streak || 0;
+            
+            // Only update streak if new problems were solved
+            if (total > previousTotal) {
+              let newCurrentStreak = currentStreak;
+              let newMaxStreak = maxStreak;
+              
+              // Calculate streak
+              if (!lastSolvedDate) {
+                // First time solving
+                newCurrentStreak = 1;
+              } else {
+                const lastDate = new Date(lastSolvedDate);
+                const todayDate = new Date(today);
+                const diffTime = todayDate.getTime() - lastDate.getTime();
+                const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+                if (diffDays === 1) {
+                  // Consecutive day
+                  newCurrentStreak = currentStreak + 1;
+                } else if (diffDays === 0) {
+                  // Same day, keep current streak (but ensure it's at least 1)
+                  newCurrentStreak = Math.max(currentStreak, 1);
+                } else {
+                  // Streak broken, start new streak
+                  newCurrentStreak = 1;
+                }
+              }
+              
+              // Update max streak if current is higher
+              if (newCurrentStreak > maxStreak) {
+                newMaxStreak = newCurrentStreak;
+              }
+              
+              // Calculate points with updated streak: Easy=1, Medium=2, Hard=3, Current Streak=5
+              const problemPoints = (easy * 1) + (medium * 2) + (hard * 3);
+              const streakPoints = newCurrentStreak * 5;
+              const totalPoints = problemPoints + streakPoints;
+              
+              // Update user with new streak and points
+              await supabaseAdmin
+                .from("users")
+                .update({
+                  last_solved_date: today,
+                  current_streak: newCurrentStreak,
+                  max_streak: newMaxStreak,
+                  total_points: totalPoints
+                })
+                .eq("id", user.id);
+            } else if (lastSolvedDate) {
+              // Check if streak should be reset due to inactivity
+              const lastDate = new Date(lastSolvedDate);
+              const todayDate = new Date(today);
+              const diffTime = todayDate.getTime() - lastDate.getTime();
+              const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+              
+              if (diffDays > 1) {
+                // More than 1 day gap - reset streak to 0
+                await supabaseAdmin
+                  .from("users")
+                  .update({
+                    current_streak: 0,
+                    total_points: (easy * 1) + (medium * 2) + (hard * 3) // Reset to just problem points
+                  })
+                  .eq("id", user.id);
+              }
+            }
+          }
+        } catch (streakError) {
+          console.error(`Error updating streak for ${user.leetcode_username}:`, streakError);
+        }
 
         refreshedUsers.push(user.leetcode_username);
       } catch (err) {
