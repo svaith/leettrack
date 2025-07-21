@@ -12,6 +12,7 @@ interface Friend {
   email: string;
   leetcode_username: string;
   total_solved: number;
+  total_points?: number;
   isCurrentUser?: boolean;
 }
 
