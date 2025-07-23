@@ -102,7 +102,7 @@ export default function LoginPage() {
               },
             }}
             providers={[]}
-            redirectTo="https://leettrack-flame.vercel.app/dashboard"
+            redirectTo={typeof window !== 'undefined' ? `${window.location.origin}/dashboard` : undefined}
           />
         </div>
         
